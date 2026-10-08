@@ -1253,12 +1253,11 @@ arrow::Status ArrowFlightServer::DoPut(
 
         auto [ast, block_io] = executeQuery(sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 
+        UInt64 affected_rows = 0;
         bool query_finished = false;
         bool handling_exception = false;
         SCOPE_EXIT({
-            if (query_finished)
-                block_io.onFinish();
-            else if (!handling_exception)
+            if (!query_finished && !handling_exception)
                 block_io.onCancelOrConnectionLoss();
         });
 
@@ -1286,6 +1285,11 @@ arrow::Status ArrowFlightServer::DoPut(
                 executor.execute();
             }
 
+            if (auto element = query_context->getProcessListElement())
+                affected_rows = element->getInfo().written_rows;
+
+            /// Finish the query, including any implicit transaction commit, before releasing the session.
+            block_io.onFinish();
             query_finished = true;
         }
         catch (...)
@@ -1298,10 +1302,7 @@ arrow::Status ArrowFlightServer::DoPut(
         if (!dont_write_flight_sql_metadata)
         {
             arrow::flight::protocol::sql::DoPutUpdateResult update_result;
-            if (auto element = query_context->getProcessListElement())
-                update_result.set_record_count(element->getInfo().written_rows);
-            else
-                update_result.set_record_count(0);
+            update_result.set_record_count(affected_rows);
 
             release_session_before_response();
             ARROW_RETURN_NOT_OK(writer->WriteMetadata(*arrow::Buffer::FromString(update_result.SerializeAsString())));

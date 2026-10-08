@@ -44,9 +44,11 @@ constexpr int32_t SQL_SEARCHABLE_FULL = 3;
 /// `Enum8` and `Enum16` are omitted because Arrow exports their numeric codes
 /// without a standard mapping back to the ClickHouse labels. Wide integers are
 /// omitted because Arrow exports their in-memory bytes as fixed-size binary.
-/// `DateTime` and `DateTime64` are omitted because the catalog cannot express
-/// that only the explicitly zoned forms have a stable Arrow `timestamp`
-/// representation; they are still identifiable via `CLICKHOUSE:TYPE_NAME`.
+/// `DateTime` is omitted because Arrow exports it as `uint32`, even with an explicit time zone.
+/// `DateTime64` uses Arrow `timestamp`, but without an explicit time zone its schema can depend on
+/// `session_timezone`. Both families stay outside this catalog and use `CLICKHOUSE:TYPE_NAME`
+/// to preserve the declared type expression, including any explicit time zone.
+/// `String` retains its existing Arrow `Utf8` representation, which requires valid UTF-8 values.
 constexpr std::array<XdbcTypeInfoRow, 17> type_info_rows = {{
     {.type_name = "UUID",
      .data_type = SQL_GUID,
